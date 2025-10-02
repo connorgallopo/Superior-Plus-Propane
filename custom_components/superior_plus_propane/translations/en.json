@@ -5,6 +5,7 @@
                 "title": "Superior Plus Propane",
                 "description": "Enter your Superior Plus Propane account credentials to configure the integration.",
                 "data": {
+                    "region": "Region",
                     "username": "Email Address",
                     "password": "Password",
                     "update_interval": "Update Interval (seconds)",
