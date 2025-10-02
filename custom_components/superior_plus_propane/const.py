@@ -18,6 +18,7 @@ TANK_URL = "https://mysuperioraccountlogin.com/Tank"
 DEFAULT_UPDATE_INTERVAL = 3600  # 1 hour
 
 # Configuration options
+CONF_REGION = "region"
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_MIN_THRESHOLD = "min_consumption_threshold"
 CONF_MAX_THRESHOLD = "max_consumption_threshold"

@@ -19,6 +19,7 @@ from .const import (
     CONF_ADAPTIVE_THRESHOLDS,
     CONF_MAX_THRESHOLD,
     CONF_MIN_THRESHOLD,
+    CONF_REGION,
     CONF_UPDATE_INTERVAL,
     DEFAULT_MAX_CONSUMPTION_GALLONS,
     DEFAULT_MIN_CONSUMPTION_GALLONS,
@@ -44,6 +45,7 @@ class SuperiorPlusPropaneFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 await self._test_credentials(
                     username=user_input[CONF_USERNAME],
                     password=user_input[CONF_PASSWORD],
+                    region=user_input.get(CONF_REGION, "US"),
                 )
             except SuperiorPlusPropaneApiClientAuthenticationError as exception:
                 LOGGER.warning(exception)
@@ -66,6 +68,15 @@ class SuperiorPlusPropaneFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
+                    vol.Required(
+                        CONF_REGION,
+                        default=(user_input or {}).get(CONF_REGION, "US"),
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=["US", "CA"],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        ),
+                    ),
                     vol.Required(
                         CONF_USERNAME,
                         default=(user_input or {}).get(CONF_USERNAME, vol.UNDEFINED),
@@ -124,12 +135,15 @@ class SuperiorPlusPropaneFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=_errors,
         )
 
-    async def _test_credentials(self, username: str, password: str) -> None:
+    async def _test_credentials(
+        self, username: str, password: str, region: str = "US"
+    ) -> None:
         """Validate credentials."""
         client = SuperiorPlusPropaneApiClient(
             username=username,
             password=password,
             session=async_create_clientsession(self.hass),
+            region=region,
         )
         await client.async_test_connection()
 

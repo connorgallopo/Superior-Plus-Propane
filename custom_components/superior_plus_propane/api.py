@@ -9,14 +9,8 @@ import async_timeout
 from bs4 import BeautifulSoup, Tag
 from slugify import slugify
 
-from .const import (
-    CUSTOMERS_URL,
-    HOME_URL,
-    LOGGER,
-    LOGIN_PAGE_URL,
-    LOGIN_URL,
-    TANK_URL,
-)
+from .const import LOGGER
+from .region_config import RegionConfig, get_region_config
 
 # Error messages
 SESSION_EXPIRED_MSG = "Session expired"
@@ -52,13 +46,24 @@ class SuperiorPlusPropaneApiClient:
         username: str,
         password: str,
         session: aiohttp.ClientSession,
+        region: str = "US",
     ) -> None:
-        """Initialize the API client."""
+        """Initialize the API client.
+
+        Args:
+            username: User's email address
+            password: User's password
+            session: aiohttp client session
+            region: Region code ("US" or "CA"), defaults to "US"
+        """
         self._username = username
         self._password = password
         self._session = session
+        self._region_config = get_region_config(region)
         self._authenticated = False
         self._auth_in_progress = False
+
+        # Build region-specific headers
         self._headers = {
             "accept": (
                 "text/html,application/xhtml+xml,application/xml;q=0.9,"
@@ -68,8 +73,8 @@ class SuperiorPlusPropaneApiClient:
             "accept-language": "en-US,en;q=0.9",
             "cache-control": "max-age=0",
             "content-type": "application/x-www-form-urlencoded",
-            "origin": "https://mysuperioraccountlogin.com",
-            "referer": "https://mysuperioraccountlogin.com/Account/Login?ReturnUrl=%2F",
+            "origin": f"https://{self._region_config.urls.base_domain}",
+            "referer": self._region_config.urls.login_page_url,
             "sec-ch-ua": (
                 '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"'
             ),
@@ -113,7 +118,9 @@ class SuperiorPlusPropaneApiClient:
             # Try to validate current session by accessing a protected page
             try:
                 async with async_timeout.timeout(10):
-                    response = await self._session.get(HOME_URL, headers=self._headers)
+                    response = await self._session.get(
+                        self._region_config.urls.home_url, headers=self._headers
+                    )
                     if response.status == HTTP_OK and "Login" not in str(response.url):
                         LOGGER.debug("Session still valid, skipping authentication")
                         return
@@ -154,9 +161,9 @@ class SuperiorPlusPropaneApiClient:
     async def _get_csrf_token(self) -> str:
         """Get CSRF token from login page."""
         try:
-            async with async_timeout.timeout(30):  # Increased from 10 to 30 seconds
+            async with async_timeout.timeout(self._region_config.timeout_login):
                 response = await self._session.get(
-                    LOGIN_PAGE_URL, headers=self._headers
+                    self._region_config.urls.login_page_url, headers=self._headers
                 )
                 if response.status != HTTP_OK:
                     msg = f"Failed to get login page: {response.status}"
@@ -166,7 +173,7 @@ class SuperiorPlusPropaneApiClient:
                 soup = BeautifulSoup(html, "html.parser")
 
                 csrf_element = soup.find(
-                    "input", {"name": "__RequestVerificationToken"}
+                    "input", {"name": self._region_config.auth_fields.csrf_token}
                 )
                 if not csrf_element or not isinstance(csrf_element, Tag):
                     msg = "CSRF token not found"
@@ -191,18 +198,16 @@ class SuperiorPlusPropaneApiClient:
 
     async def _login(self, csrf_token: str) -> None:
         """Login to Superior Plus Propane."""
-        payload = {
-            "__RequestVerificationToken": csrf_token,
-            "EmailAddress": self._username,
-            "Password": self._password,
-            "RememberMe": "true",
-        }
+        # Build region-specific login payload
+        payload = self._region_config.build_login_payload(
+            self._username, self._password, csrf_token
+        )
 
         try:
             # Login POST request
-            async with async_timeout.timeout(30):  # Increased timeout for login
+            async with async_timeout.timeout(self._region_config.timeout_login):
                 response = await self._session.post(
-                    LOGIN_URL, headers=self._headers, data=payload
+                    self._region_config.urls.login_url, headers=self._headers, data=payload
                 )
 
                 # Check if login was successful by looking at redirect URL
@@ -214,12 +219,16 @@ class SuperiorPlusPropaneApiClient:
             # Navigate through required pages with longer timeouts
             LOGGER.debug("Login successful, navigating to required pages...")
 
-            async with async_timeout.timeout(60):  # Increased timeout for navigation
-                await self._session.get(HOME_URL, headers=self._headers)
-                LOGGER.debug("Successfully navigated to HOME_URL")
+            async with async_timeout.timeout(self._region_config.timeout_navigation):
+                await self._session.get(
+                    self._region_config.urls.home_url, headers=self._headers
+                )
+                LOGGER.debug("Successfully navigated to home")
 
-                await self._session.get(CUSTOMERS_URL, headers=self._headers)
-                LOGGER.debug("Successfully navigated to CUSTOMERS_URL")
+                await self._session.get(
+                    self._region_config.urls.customers_url, headers=self._headers
+                )
+                LOGGER.debug("Successfully navigated to customers")
 
         except TimeoutError as exception:
             msg = f"Timeout during login: {exception}"
@@ -228,8 +237,10 @@ class SuperiorPlusPropaneApiClient:
     async def _get_tanks_from_page(self) -> list[dict[str, Any]]:
         """Get tank data from the tank page."""
         try:
-            async with async_timeout.timeout(10):
-                response = await self._session.get(TANK_URL, headers=self._headers)
+            async with async_timeout.timeout(self._region_config.timeout_data):
+                response = await self._session.get(
+                    self._region_config.urls.tank_url, headers=self._headers
+                )
 
                 # Check if we were redirected to login page (session expired)
                 if "Login" in str(response.url):
@@ -247,7 +258,7 @@ class SuperiorPlusPropaneApiClient:
                 soup = BeautifulSoup(html, "html.parser")
 
                 # Check if page contains login form (expired session indicator)
-                login_form = soup.find("form", {"action": "/Account/Login"})
+                login_form = soup.select_one(self._region_config.selectors.login_form)
                 if login_form:
                     LOGGER.debug("Login form found on tank page, session expired")
                     self._authenticated = False
@@ -256,7 +267,7 @@ class SuperiorPlusPropaneApiClient:
                     )
 
                 # Find all tank rows
-                tank_rows = soup.select("div.tank-row")
+                tank_rows = soup.select(self._region_config.selectors.tank_row)
                 tanks_data = []
 
                 for idx, row in enumerate(tank_rows):
@@ -276,7 +287,7 @@ class SuperiorPlusPropaneApiClient:
 
     def _extract_address(self, row: Tag) -> tuple[str, str] | None:
         """Extract and clean address from row."""
-        address_element = row.select_one(".col-md-2")
+        address_element = row.select_one(self._region_config.selectors.address)
         if not address_element:
             return None
 
@@ -288,13 +299,13 @@ class SuperiorPlusPropaneApiClient:
 
     def _extract_tank_info(self, row: Tag) -> tuple[str, str]:
         """Extract tank size and type."""
-        tank_info_element = row.select_one(".col-md-3")
+        tank_info_element = row.select_one(self._region_config.selectors.tank_info)
         tank_size = "unknown"
         tank_type = "unknown"
 
         if tank_info_element:
             tank_info_text = tank_info_element.get_text()
-            size_match = re.search(r"(\d+)\s*gal\.", tank_info_text)
+            size_match = re.search(self._region_config.patterns.tank_size, tank_info_text)
             if size_match:
                 tank_size = size_match.group(1)
             if "Propane" in tank_info_text:
@@ -304,20 +315,22 @@ class SuperiorPlusPropaneApiClient:
 
     def _extract_level(self, row: Tag) -> str:
         """Extract level percentage from progress bar."""
-        progress_bar = row.select_one("div.progress-bar")
-        if progress_bar and progress_bar.get("aria-valuenow"):
+        progress_bar = row.select_one(self._region_config.selectors.progress_bar)
+        if progress_bar:
+            # For now, aria-valuenow is hardcoded but can be made configurable later
             value = progress_bar.get("aria-valuenow")
-            if isinstance(value, list):
-                return value[0] if value else "unknown"
-            return str(value) if value else "unknown"
+            if value:
+                if isinstance(value, list):
+                    return value[0] if value else "unknown"
+                return str(value)
         return "unknown"
 
     def _extract_gallons(self, row: Tag) -> str:
         """Extract current gallons."""
-        gallons_text = row.find(string=re.compile(r"Approximately \d+ gallons in tank"))
+        gallons_text = row.find(string=re.compile(self._region_config.patterns.gallons_in_tank))
         if gallons_text:
             gallons_match = re.search(
-                r"Approximately (\d+) gallons in tank", str(gallons_text)
+                self._region_config.patterns.gallons_in_tank, str(gallons_text)
             )
             if gallons_match:
                 return gallons_match.group(1)
@@ -337,9 +350,11 @@ class SuperiorPlusPropaneApiClient:
 
     def _extract_price(self, row: Tag) -> str:
         """Extract price per gallon."""
-        price_text = row.find(string=re.compile(r"\$\d+\.\d+"))
+        price_text = row.find(string=re.compile(self._region_config.patterns.price_per_gallon))
         if price_text:
-            price_match = re.search(r"\$(\d+\.\d+)", str(price_text))
+            price_match = re.search(
+                self._region_config.patterns.price_per_gallon, str(price_text)
+            )
             if price_match:
                 return price_match.group(1)
         return "unknown"
@@ -357,8 +372,13 @@ class SuperiorPlusPropaneApiClient:
             tank_size, tank_type = self._extract_tank_info(row)
             level = self._extract_level(row)
             current_gallons = self._extract_gallons(row)
-            reading_date = self._extract_date(row, "Reading Date:")
-            last_delivery = self._extract_date(row, "Last Delivery:")
+            # Extract dates using region-specific patterns (without the regex part)
+            reading_date = self._extract_date(
+                row, self._region_config.patterns.reading_date.split(r"\s*")[0].rstrip(":")
+            )
+            last_delivery = self._extract_date(
+                row, self._region_config.patterns.last_delivery.split(r"\s*")[0].rstrip(":")
+            )
             price_per_gallon = self._extract_price(row)
 
         except (AttributeError, ValueError, TypeError) as exception:

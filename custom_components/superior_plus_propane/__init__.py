@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+
+from .const import CONF_REGION
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.loader import async_get_loaded_integration
 
@@ -43,6 +45,7 @@ async def async_setup_entry(
             username=entry.data[CONF_USERNAME],
             password=entry.data[CONF_PASSWORD],
             session=async_create_clientsession(hass),
+            region=entry.data.get(CONF_REGION, "US"),
         ),
         integration=async_get_loaded_integration(hass, entry.domain),
         coordinator=coordinator,
