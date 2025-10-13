@@ -15,7 +15,7 @@ from homeassistant.const import (
     UnitOfVolume,
 )
 
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN, GALLONS_TO_CUBIC_FEET, LOGGER
 from .entity import SuperiorPlusPropaneEntity
 
 if TYPE_CHECKING:
@@ -240,14 +240,14 @@ class SuperiorPlusPropanePriceSensor(SuperiorPlusPropaneEntity, SensorEntity):
         super().__init__(coordinator, tank_data)
         self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_price"
         self._attr_name = f"{tank_data['address']} Price per Gallon"
-        self._attr_native_unit_of_measurement = "USD/gal"
+        self._attr_native_unit_of_measurement = "USD/ft³"
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = None
         self._attr_icon = "mdi:currency-usd"
 
     @property
     def native_value(self) -> float | None:
-        """Return the price per gallon."""
+        """Return the price per cubic foot (converted from price per gallon)."""
         tank_data = self._get_tank_data()
         if not tank_data:
             return None
@@ -257,7 +257,9 @@ class SuperiorPlusPropanePriceSensor(SuperiorPlusPropaneEntity, SensorEntity):
             return None
 
         try:
-            return float(price_str)
+            price_per_gallon = float(price_str)
+            # Convert from $/gal to $/ft³ for energy dashboard compatibility
+            return round(price_per_gallon / GALLONS_TO_CUBIC_FEET, 4)
         except (ValueError, TypeError):
             return None
 
