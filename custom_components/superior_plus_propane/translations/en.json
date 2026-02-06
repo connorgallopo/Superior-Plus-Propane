@@ -3,19 +3,36 @@
         "step": {
             "user": {
                 "title": "Superior Plus Propane",
-                "description": "Enter your Superior Plus Propane account credentials to configure the integration.",
+                "description": "Select your region to get started.",
+                "data": {
+                    "region": "Region"
+                }
+            },
+            "credentials": {
+                "title": "Account Credentials",
+                "description": "Enter your mySuperior portal credentials.",
                 "data": {
                     "username": "Email Address",
                     "password": "Password",
                     "update_interval": "Update Interval (seconds)",
+                    "include_unmonitored_tanks": "Include Unmonitored Tanks",
                     "adaptive_thresholds": "Use Dynamic Consumption Thresholds",
-                    "min_consumption_threshold": "Minimum Consumption (gallons per reading)",
-                    "max_consumption_threshold": "Maximum Consumption (gallons per reading)"
+                    "min_consumption_threshold": "Minimum Consumption (per reading)",
+                    "max_consumption_threshold": "Maximum Consumption (per reading)"
                 },
                 "data_description": {
+                    "include_unmonitored_tanks": "Show tanks that are not on a delivery plan.",
                     "adaptive_thresholds": "Automatically adjust consumption thresholds based on tank size. Recommended for most users.",
-                    "min_consumption_threshold": "Only used when dynamic thresholds are disabled. Consumption below this will be logged but still recorded.",
-                    "max_consumption_threshold": "Only used when dynamic thresholds are disabled. Consumption above this will be flagged as anomalous but still recorded."
+                    "min_consumption_threshold": "Only used when dynamic thresholds are disabled.",
+                    "max_consumption_threshold": "Only used when dynamic thresholds are disabled."
+                }
+            },
+            "reauth_confirm": {
+                "title": "Re-authenticate",
+                "description": "Please re-enter your mySuperior portal credentials.",
+                "data": {
+                    "username": "Email Address",
+                    "password": "Password"
                 }
             }
         },
@@ -26,25 +43,31 @@
             "invalid_thresholds": "Minimum threshold must be less than maximum threshold."
         },
         "abort": {
-            "already_configured": "This Superior Plus Propane account is already configured."
+            "already_configured": "This account is already configured.",
+            "reauth_successful": "Re-authentication successful."
         }
     },
     "options": {
+        "error": {
+            "invalid_thresholds": "Minimum threshold must be less than maximum threshold."
+        },
         "step": {
             "init": {
                 "title": "Configure Superior Plus Propane",
-                "description": "Adjust settings for your Superior Plus Propane integration.",
+                "description": "Adjust settings for your integration.",
                 "data": {
                     "update_interval": "Update Interval (seconds)",
+                    "include_unmonitored_tanks": "Include Unmonitored Tanks",
                     "adaptive_thresholds": "Use Dynamic Consumption Thresholds",
-                    "min_consumption_threshold": "Minimum Consumption (gallons per reading)",
-                    "max_consumption_threshold": "Maximum Consumption (gallons per reading)"
+                    "min_consumption_threshold": "Minimum Consumption (per reading)",
+                    "max_consumption_threshold": "Maximum Consumption (per reading)"
                 },
                 "data_description": {
                     "update_interval": "How often to check for new tank readings (minimum 5 minutes).",
-                    "adaptive_thresholds": "Automatically adjust consumption thresholds based on tank size. Recommended for most users.",
-                    "min_consumption_threshold": "Only used when dynamic thresholds are disabled. Consumption below this will be logged but still recorded.",
-                    "max_consumption_threshold": "Only used when dynamic thresholds are disabled. Consumption above this will be flagged as anomalous but still recorded."
+                    "include_unmonitored_tanks": "Show tanks that are not on a delivery plan.",
+                    "adaptive_thresholds": "Automatically adjust consumption thresholds based on tank size.",
+                    "min_consumption_threshold": "Only used when dynamic thresholds are disabled.",
+                    "max_consumption_threshold": "Only used when dynamic thresholds are disabled."
                 }
             }
         }
