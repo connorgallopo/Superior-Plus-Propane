@@ -12,10 +12,9 @@ from homeassistant.components.sensor import (
 from homeassistant.const import (
     PERCENTAGE,
     UnitOfTime,
-    UnitOfVolume,
 )
 
-from .const import DOMAIN, GALLONS_TO_CUBIC_FEET, LOGGER
+from .const import CONF_INCLUDE_UNMONITORED, DOMAIN, LOGGER
 from .entity import SuperiorPlusPropaneEntity
 
 if TYPE_CHECKING:
@@ -24,24 +23,46 @@ if TYPE_CHECKING:
 
     from .coordinator import SuperiorPlusPropaneDataUpdateCoordinator
     from .data import SuperiorPlusPropaneConfigEntry
+    from .region import RegionConfig
+
+
+def _build_unique_id(tank_data: dict[str, Any], suffix: str) -> str:
+    """Build a unique ID for a sensor, including customer_number for CA."""
+    customer_number = tank_data.get("customer_number", "unknown")
+    tank_id = tank_data["tank_id"]
+    if customer_number != "unknown":
+        return f"{DOMAIN}_{customer_number}_{tank_id}_{suffix}"
+    return f"{DOMAIN}_{tank_id}_{suffix}"
+
+
+def _build_sensor_name(
+    region_config: RegionConfig, tank_data: dict[str, Any], label: str
+) -> str:
+    """Build a sensor name, using full address for US or short label for CA."""
+    if region_config.has_entity_name:
+        return label
+    return f"{tank_data['address']} {label}"
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
+    hass: HomeAssistant,  # noqa: ARG001
     entry: SuperiorPlusPropaneConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform."""
     coordinator = entry.runtime_data.coordinator
+    region_config = coordinator.region_config
 
-    # Wait for first data fetch to discover tanks
     if not coordinator.data:
         LOGGER.warning("No tank data available during sensor setup")
         return
 
-    entities = []
+    tanks = coordinator.data.get("tanks", [])
+    include_unmonitored = entry.data.get(CONF_INCLUDE_UNMONITORED, False)
 
-    for tank_data in coordinator.data:
+    entities: list[SensorEntity] = []
+
+    for tank_data in tanks:
         if not isinstance(tank_data, dict):
             continue
 
@@ -51,24 +72,43 @@ async def async_setup_entry(
         if not tank_id or not address:
             continue
 
-        # Create all sensors for this tank
+        if not include_unmonitored and not tank_data.get("is_on_delivery_plan", True):
+            LOGGER.debug("Skipping unmonitored tank: %s", tank_id)
+            continue
+
         entities.extend(
             [
-                # Primary tank sensors
-                SuperiorPlusPropaneLevelSensor(coordinator, tank_data),
-                SuperiorPlusPropaneGallonsSensor(coordinator, tank_data),
-                SuperiorPlusPropaneCapacitySensor(coordinator, tank_data),
-                # Information sensors
-                SuperiorPlusPropaneReadingDateSensor(coordinator, tank_data),
-                SuperiorPlusPropaneLastDeliverySensor(coordinator, tank_data),
-                SuperiorPlusPropanePriceSensor(coordinator, tank_data),
-                SuperiorPlusPropaneDaysSinceDeliverySensor(coordinator, tank_data),
-                # Consumption sensors for energy dashboard
-                SuperiorPlusPropaneConsumptionTotalSensor(coordinator, tank_data),
-                SuperiorPlusPropaneConsumptionRateSensor(coordinator, tank_data),
-                # Data quality sensor
-                SuperiorPlusPropaneDataQualitySensor(coordinator, tank_data),
+                SuperiorPlusPropaneLevelSensor(coordinator, tank_data, region_config),
+                SuperiorPlusPropaneVolumeSensor(coordinator, tank_data, region_config),
+                SuperiorPlusPropaneCapacitySensor(
+                    coordinator, tank_data, region_config
+                ),
+                SuperiorPlusPropaneReadingDateSensor(
+                    coordinator, tank_data, region_config
+                ),
+                SuperiorPlusPropaneLastDeliverySensor(
+                    coordinator, tank_data, region_config
+                ),
+                SuperiorPlusPropanePriceSensor(coordinator, tank_data, region_config),
+                SuperiorPlusPropaneDaysSinceDeliverySensor(
+                    coordinator, tank_data, region_config
+                ),
+                SuperiorPlusPropaneConsumptionTotalSensor(
+                    coordinator, tank_data, region_config
+                ),
+                SuperiorPlusPropaneConsumptionRateSensor(
+                    coordinator, tank_data, region_config
+                ),
+                SuperiorPlusPropaneDataQualitySensor(
+                    coordinator, tank_data, region_config
+                ),
             ]
+        )
+
+    # Add average price sensor (reads from orders data, one per integration)
+    if tanks:
+        entities.append(
+            SuperiorPlusPropaneAveragePriceSensor(coordinator, tanks[0], region_config)
         )
 
     async_add_entities(entities)
@@ -81,11 +121,12 @@ class SuperiorPlusPropaneLevelSensor(SuperiorPlusPropaneEntity, SensorEntity):
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_level"
-        self._attr_name = f"{tank_data['address']} Level"
+        self._attr_unique_id = _build_unique_id(tank_data, "level")
+        self._attr_name = _build_sensor_name(region_config, tank_data, "Level")
         self._attr_native_unit_of_measurement = PERCENTAGE
         self._attr_device_class = None
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -108,36 +149,37 @@ class SuperiorPlusPropaneLevelSensor(SuperiorPlusPropaneEntity, SensorEntity):
             return None
 
 
-class SuperiorPlusPropaneGallonsSensor(SuperiorPlusPropaneEntity, SensorEntity):
-    """Current gallons sensor."""
+class SuperiorPlusPropaneVolumeSensor(SuperiorPlusPropaneEntity, SensorEntity):
+    """Current volume sensor."""
 
     def __init__(
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_gallons"
-        self._attr_name = f"{tank_data['address']} Current Gallons"
-        self._attr_native_unit_of_measurement = UnitOfVolume.GALLONS
+        self._attr_unique_id = _build_unique_id(tank_data, "volume")
+        self._attr_name = _build_sensor_name(region_config, tank_data, "Current Volume")
+        self._attr_native_unit_of_measurement = region_config.volume_unit
         self._attr_device_class = SensorDeviceClass.VOLUME
         self._attr_state_class = None
         self._attr_icon = "mdi:propane-tank"
 
     @property
     def native_value(self) -> float | None:
-        """Return the current gallons in tank."""
+        """Return the current volume in tank."""
         tank_data = self._get_tank_data()
         if not tank_data:
             return None
 
-        gallons_str = tank_data.get("current_gallons", "unknown")
-        if gallons_str == "unknown":
+        volume_str = tank_data.get("current_volume", "unknown")
+        if volume_str == "unknown":
             return None
 
         try:
-            return float(gallons_str)
+            return float(volume_str)
         except (ValueError, TypeError):
             return None
 
@@ -149,12 +191,13 @@ class SuperiorPlusPropaneCapacitySensor(SuperiorPlusPropaneEntity, SensorEntity)
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_capacity"
-        self._attr_name = f"{tank_data['address']} Capacity"
-        self._attr_native_unit_of_measurement = UnitOfVolume.GALLONS
+        self._attr_unique_id = _build_unique_id(tank_data, "capacity")
+        self._attr_name = _build_sensor_name(region_config, tank_data, "Capacity")
+        self._attr_native_unit_of_measurement = region_config.volume_unit
         self._attr_device_class = SensorDeviceClass.VOLUME
         self._attr_state_class = None
         self._attr_icon = "mdi:propane-tank-outline"
@@ -183,11 +226,12 @@ class SuperiorPlusPropaneReadingDateSensor(SuperiorPlusPropaneEntity, SensorEnti
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_reading_date"
-        self._attr_name = f"{tank_data['address']} Reading Date"
+        self._attr_unique_id = _build_unique_id(tank_data, "reading_date")
+        self._attr_name = _build_sensor_name(region_config, tank_data, "Reading Date")
         self._attr_device_class = None
         self._attr_icon = "mdi:calendar-clock"
 
@@ -209,11 +253,12 @@ class SuperiorPlusPropaneLastDeliverySensor(SuperiorPlusPropaneEntity, SensorEnt
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_last_delivery"
-        self._attr_name = f"{tank_data['address']} Last Delivery"
+        self._attr_unique_id = _build_unique_id(tank_data, "last_delivery")
+        self._attr_name = _build_sensor_name(region_config, tank_data, "Last Delivery")
         self._attr_device_class = None
         self._attr_icon = "mdi:truck-delivery"
 
@@ -229,37 +274,36 @@ class SuperiorPlusPropaneLastDeliverySensor(SuperiorPlusPropaneEntity, SensorEnt
 
 
 class SuperiorPlusPropanePriceSensor(SuperiorPlusPropaneEntity, SensorEntity):
-    """Price per gallon sensor."""
+    """Price per unit sensor."""
 
     def __init__(
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_price"
-        self._attr_name = f"{tank_data['address']} Price per Gallon"
-        self._attr_native_unit_of_measurement = "USD/ft³"
+        self._attr_unique_id = _build_unique_id(tank_data, "price")
+        self._attr_name = _build_sensor_name(region_config, tank_data, "Price per Unit")
+        self._attr_native_unit_of_measurement = region_config.price_unit
         self._attr_device_class = SensorDeviceClass.MONETARY
         self._attr_state_class = None
         self._attr_icon = "mdi:currency-usd"
 
     @property
     def native_value(self) -> float | None:
-        """Return the price per cubic foot (converted from price per gallon)."""
+        """Return the price per unit."""
         tank_data = self._get_tank_data()
         if not tank_data:
             return None
 
-        price_str = tank_data.get("price_per_gallon", "unknown")
+        price_str = tank_data.get("price_per_unit", "unknown")
         if price_str == "unknown":
             return None
 
         try:
-            price_per_gallon = float(price_str)
-            # Convert from $/gal to $/ft³ for energy dashboard compatibility
-            return round(price_per_gallon / GALLONS_TO_CUBIC_FEET, 4)
+            return round(float(price_str), 4)
         except (ValueError, TypeError):
             return None
 
@@ -273,11 +317,14 @@ class SuperiorPlusPropaneDaysSinceDeliverySensor(
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_days_since_delivery"
-        self._attr_name = f"{tank_data['address']} Days Since Delivery"
+        self._attr_unique_id = _build_unique_id(tank_data, "days_since_delivery")
+        self._attr_name = _build_sensor_name(
+            region_config, tank_data, "Days Since Delivery"
+        )
         self._attr_native_unit_of_measurement = UnitOfTime.DAYS
         self._attr_device_class = None
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -309,54 +356,59 @@ class SuperiorPlusPropaneConsumptionTotalSensor(
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_consumption_total"
-        self._attr_name = f"{tank_data['address']} Total Consumption"
-        self._attr_native_unit_of_measurement = "ft³"
+        self._attr_unique_id = _build_unique_id(tank_data, "consumption_total")
+        self._attr_name = _build_sensor_name(
+            region_config, tank_data, "Total Consumption"
+        )
+        self._attr_native_unit_of_measurement = region_config.consumption_display_unit
         self._attr_device_class = SensorDeviceClass.GAS
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
         self._attr_icon = "mdi:fire"
+        self._display_factor = region_config.consumption_display_factor
 
     @property
     def native_value(self) -> float | None:
-        """Return total consumption in cubic feet."""
+        """Return total consumption in display units."""
         tank_data = self._get_tank_data()
         if not tank_data:
             return None
 
-        return tank_data.get("consumption_total", 0.0)
+        return tank_data.get("consumption_total", 0.0) * self._display_factor
 
 
 class SuperiorPlusPropaneConsumptionRateSensor(SuperiorPlusPropaneEntity, SensorEntity):
-    """Consumption rate sensor showing current hourly usage (informational only).
-
-    Note: This sensor is NOT used by the Energy Dashboard. The Energy Dashboard
-    calculates its own rates from the Total Consumption sensor."""
+    """Consumption rate sensor showing current hourly usage."""
 
     def __init__(
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_consumption_rate"
-        self._attr_name = f"{tank_data['address']} Consumption Rate"
-        self._attr_native_unit_of_measurement = "ft³/h"
+        self._attr_unique_id = _build_unique_id(tank_data, "consumption_rate")
+        self._attr_name = _build_sensor_name(
+            region_config, tank_data, "Consumption Rate"
+        )
+        self._attr_native_unit_of_measurement = region_config.rate_display_unit
         self._attr_device_class = None
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:speedometer"
+        self._display_factor = region_config.rate_display_factor
 
     @property
     def native_value(self) -> float | None:
-        """Return consumption rate in cubic feet per hour."""
+        """Return consumption rate in display units per hour."""
         tank_data = self._get_tank_data()
         if not tank_data:
             return None
 
-        return tank_data.get("consumption_rate", 0.0)
+        return tank_data.get("consumption_rate", 0.0) * self._display_factor
 
 
 class SuperiorPlusPropaneDataQualitySensor(SuperiorPlusPropaneEntity, SensorEntity):
@@ -366,11 +418,12 @@ class SuperiorPlusPropaneDataQualitySensor(SuperiorPlusPropaneEntity, SensorEnti
         self,
         coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
         tank_data: dict[str, Any],
+        region_config: RegionConfig,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator, tank_data)
-        self._attr_unique_id = f"{DOMAIN}_{tank_data['tank_id']}_data_quality"
-        self._attr_name = f"{tank_data['address']} Data Quality"
+        self._attr_unique_id = _build_unique_id(tank_data, "data_quality")
+        self._attr_name = _build_sensor_name(region_config, tank_data, "Data Quality")
         self._attr_device_class = None
         self._attr_state_class = None
         self._attr_icon = "mdi:shield-check"
@@ -382,8 +435,7 @@ class SuperiorPlusPropaneDataQualitySensor(SuperiorPlusPropaneEntity, SensorEnti
         if not tank_data:
             return None
 
-        quality = tank_data.get("data_quality", "unknown")
-        return quality
+        return tank_data.get("data_quality", "Unknown")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -392,10 +444,7 @@ class SuperiorPlusPropaneDataQualitySensor(SuperiorPlusPropaneEntity, SensorEnti
         if not tank_data:
             return {}
 
-        attrs = {}
-        if tank_data.get("data_corrected"):
-            attrs["data_corrected"] = True
-            attrs["correction_reason"] = "Gallons value adjusted to match tank level percentage"
+        attrs: dict[str, Any] = {}
         if tank_data.get("consumption_anomaly"):
             attrs["consumption_anomaly"] = True
             attrs["anomaly_reason"] = "Consumption exceeded expected threshold"
@@ -412,14 +461,50 @@ class SuperiorPlusPropaneDataQualitySensor(SuperiorPlusPropaneEntity, SensorEnti
         if not tank_data:
             return "mdi:shield-off"
 
-        quality = tank_data.get("data_quality", "unknown")
-        has_correction = tank_data.get("data_corrected", False)
+        quality = tank_data.get("data_quality", "Unknown")
 
-        if quality == "good" and not has_correction:
+        if quality == "Good":
             return "mdi:shield-check"
-        elif quality == "data_inconsistent" or has_correction:
+        if quality == "Inconsistent Values":
             return "mdi:shield-alert"
-        elif quality in ["invalid_level", "invalid_tank_size", "calculation_error"]:
+        if quality in ("Invalid Level", "Invalid Tank Size", "Calculation Error"):
             return "mdi:shield-off"
-        else:
-            return "mdi:shield-outline"
+        return "mdi:shield-outline"
+
+
+class SuperiorPlusPropaneAveragePriceSensor(SuperiorPlusPropaneEntity, SensorEntity):
+    """Average price sensor from orders data."""
+
+    def __init__(
+        self,
+        coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
+        tank_data: dict[str, Any],
+        region_config: RegionConfig,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, tank_data)
+        self._attr_unique_id = _build_unique_id(tank_data, "average_price")
+        self._attr_name = _build_sensor_name(region_config, tank_data, "Average Price")
+        self._attr_native_unit_of_measurement = region_config.price_unit
+        self._attr_device_class = SensorDeviceClass.MONETARY
+        self._attr_state_class = None
+        self._attr_icon = "mdi:cash-multiple"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the average price from orders data."""
+        if not self.coordinator.data:
+            return None
+
+        orders = self.coordinator.data.get("orders", {})
+        if not orders:
+            return None
+
+        avg_price = orders.get("average_price")
+        if avg_price is None:
+            return None
+
+        try:
+            return round(float(avg_price), 4)
+        except (ValueError, TypeError):
+            return None
