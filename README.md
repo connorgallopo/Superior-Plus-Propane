@@ -3,62 +3,73 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![GitHub Release](https://img.shields.io/github/release/connorgallopo/Superior-Plus-Propane.svg)](https://github.com/connorgallopo/Superior-Plus-Propane/releases)
 
-A custom Home Assistant integration for monitoring **Superior Plus Propane** tanks with automatic consumption tracking for the Energy Dashboard. Seamlessly integrate your propane tank monitoring with your smart home automation.
+A custom Home Assistant integration for monitoring propane tanks via the mySuperior customer portals. Supports both **Superior Plus Propane** (United States) and **Superior Propane** (Canada) with automatic consumption tracking for the Energy Dashboard.
 
-> **Compatible with Superior Plus Propane's mySuperior customer portal** - Monitor your propane tanks directly in Home Assistant using the same data from your [mySuperior account](https://mysuperioraccountlogin.com/).
+## Supported Regions
 
-## About Superior Plus Propane
+| Region | Provider | Portal | Units |
+|--------|----------|--------|-------|
+| United States | [Superior Plus Propane](https://www.superiorpluspropane.com/) | [mysuperioraccountlogin.com](https://mysuperioraccountlogin.com/) | Gallons, ft³ |
+| Canada | [Superior Propane](https://www.superiorpropane.com/) | [mysuperior.superiorpropane.com](https://mysuperior.superiorpropane.com/) | Litres, m³ |
 
-[Superior Plus Propane](https://www.superiorpluspropane.com/) has been serving customers since 1922 with over 200 service locations across 22 states. Their **mySuperior** customer portal provides 24/7 access to:
-- View fuel levels and tank percentages
-- Schedule deliveries
-- Manage your account
-- Make payments
-- Track delivery history
-
-This integration brings all that tank monitoring data directly into your Home Assistant dashboard.
+Both providers operate under the Superior Plus LP umbrella. Each has its own customer portal with separate login credentials.
 
 ## Features
 
-- **Multi-Tank Support**: Automatically discovers and monitors all tanks on your Superior Plus Propane account
-- **Real-Time Monitoring**: Track tank level %, current gallons, capacity, reading dates, and delivery history
-- **Energy Dashboard Integration**: Built-in consumption tracking with proper `state_class: total_increasing` for Home Assistant's Energy Dashboard
-- **Smart Analytics**: Monitor consumption rates, calculate days since last delivery, and track usage patterns
-- **Native HA Integration**: No external scripts, automations, or additional hardware required
-- **HACS Compatible**: Easy installation and automatic updates
-- **Secure Authentication**: Uses your existing mySuperior portal credentials
+- **US and Canadian Support**: Works with both Superior Plus Propane (US) and Superior Propane (CA) accounts
+- **Multi-Tank Support**: Automatically discovers and monitors all tanks on your account
+- **Energy Dashboard Integration**: Consumption tracking with `state_class: total_increasing` for Home Assistant's Energy Dashboard
+- **Consumption Tracking**: Monitors usage between readings, detects refills, flags anomalies
+- **Configurable Thresholds**: Dynamic consumption thresholds that adapt to tank size and polling interval, or set your own
+- **Persistent Totals**: Consumption data survives Home Assistant restarts
+- **HACS Compatible**: Install and update through HACS
 
 ## Tank Data Tracked
 
-For each propane tank on your Superior Plus Propane account, the integration provides:
+For each propane tank on your account, the integration creates the following sensors:
 
 ### Primary Metrics
-- **Tank Level** (%) - Current fill percentage from tank monitoring system
-- **Current Gallons** - Exact gallons currently in tank
-- **Tank Capacity** - Total tank size in gallons
 
-### Delivery & Service Information
-- **Reading Date** - When the level was last measured by Superior Plus
-- **Last Delivery** - Date of most recent propane delivery
-- **Days Since Delivery** - Automatically calculated days since last fill
-- **Price per Gallon** - Current propane pricing from your account
+| Sensor | US Unit | CA Unit | Description |
+|--------|---------|---------|-------------|
+| Tank Level | % | % | Current fill percentage |
+| Current Volume | gal | L | Volume currently in tank |
+| Tank Capacity | gal | L | Total tank size |
 
-### Energy Dashboard Integration
-- **Total Consumption** (ft³) - Cumulative gas usage with `total_increasing` state class
-- **Consumption Rate** (ft³/h) - Current usage rate for trend analysis
+### Delivery & Service
+
+| Sensor | Description |
+|--------|-------------|
+| Reading Date | When the level was last measured |
+| Last Delivery | Date of most recent propane delivery |
+| Days Since Delivery | Calculated days since last fill |
+| Price per Unit | Current pricing (USD/ft³ for US, CAD/L for CA) |
+
+### Energy Dashboard Sensors
+
+| Sensor | US Unit | CA Unit | State Class | Description |
+|--------|---------|---------|-------------|-------------|
+| Total Consumption | ft³ | L | `total_increasing` | Cumulative gas usage |
+| Consumption Rate | ft³/h | L/h | `measurement` | Current usage rate |
+
+### Data Quality
+
+| Sensor | Description |
+|--------|-------------|
+| Data Quality | Validation status: Good, Invalid Tank Size, Invalid Level, Inconsistent Values, or Calculation Error |
 
 ## Installation
 
 ### HACS (Recommended)
 
 1. Open HACS in Home Assistant
-2. Go to "Integrations" 
-3. Click the three dots menu → "Custom repositories"
+2. Go to "Integrations"
+3. Click the three dots menu, then "Custom repositories"
 4. Add this repository URL: `https://github.com/connorgallopo/Superior-Plus-Propane`
 5. Category: "Integration"
 6. Install "Superior Plus Propane" from HACS
 7. Restart Home Assistant
-8. Go to Settings → Devices & Services → Add Integration
+8. Go to Settings, then Devices & Services, then Add Integration
 9. Search for "Superior Plus Propane"
 
 ### Manual Installation
@@ -66,34 +77,43 @@ For each propane tank on your Superior Plus Propane account, the integration pro
 1. Download the latest release from [GitHub Releases](https://github.com/connorgallopo/Superior-Plus-Propane/releases)
 2. Copy the `custom_components/superior_plus_propane` folder to your Home Assistant `custom_components` directory
 3. Restart Home Assistant
-4. Add the integration through Settings → Devices & Services → Add Integration
+4. Add the integration through Settings, then Devices & Services, then Add Integration
 
 ## Configuration
 
 ### Prerequisites
-- Active Superior Plus Propane account with propane service
-- Registered [mySuperior portal account](https://mysuperioraccountlogin.com/)
-- Email address and password for your mySuperior account
+
+- An active account with one of:
+  - **US**: [Superior Plus Propane mySuperior portal](https://mysuperioraccountlogin.com/)
+  - **Canada**: [Superior Propane mySuperior portal](https://mysuperior.superiorpropane.com/)
+- Email address and password for your portal account
 
 ### Setup Steps
 
-1. **Add Integration**: Go to Settings → Devices & Services → Add Integration
+1. **Add Integration**: Settings, then Devices & Services, then Add Integration
 2. **Search**: Look for "Superior Plus Propane"
-3. **Credentials**: Enter your mySuperior portal email and password
-4. **Update Interval**: Choose update frequency (default: 1 hour, minimum: 5 minutes)
-5. **Auto-Discovery**: The integration will automatically find all tanks on your account
+3. **Select Region**: Choose United States or Canada
+4. **Enter Credentials**: Your mySuperior portal email and password
+5. **Configure Options**: Update interval, threshold settings, unmonitored tank visibility
+6. **Done**: The integration discovers all tanks on your account
 
 ### Configuration Options
 
-- **Email Address**: Your mySuperior portal login email
-- **Password**: Your mySuperior account password  
-- **Update Interval**: How often to check for updates (300-86400 seconds)
+| Option | Default | Description |
+|--------|---------|-------------|
+| Update Interval | 3600s (US) / 7200s (CA) | How often to poll for new data (300-86400 seconds) |
+| Include Unmonitored Tanks | Off | Show tanks not on a delivery plan |
+| Dynamic Consumption Thresholds | On | Automatically adjust thresholds based on tank size. Recommended for most users. |
+| Min Consumption Threshold | 0.01 | Per-reading minimum (only used when dynamic thresholds are off) |
+| Max Consumption Threshold | 25.0 | Per-reading maximum (only used when dynamic thresholds are off) |
 
-> **Note**: This integration uses the same login credentials as the [mySuperior customer portal](https://mysuperioraccountlogin.com/). If you can log in there, you can use this integration.
+All options can be changed after setup through the integration's "Configure" button in Settings, then Devices & Services.
 
 ## Entity Naming
 
-Entities are automatically created using your tank's service address for easy identification:
+### United States
+
+US entities use the full integration domain and tank address:
 
 ```
 sensor.superior_plus_propane_123_main_street_level
@@ -104,28 +124,47 @@ sensor.superior_plus_propane_123_main_street_consumption_rate
 sensor.superior_plus_propane_123_main_street_days_since_delivery
 ```
 
+### Canada
+
+CA entities use Home Assistant's `has_entity_name` convention with shorter sensor labels under the device:
+
+```
+sensor.propane_tank_123_main_street_level
+sensor.propane_tank_123_main_street_volume
+sensor.propane_tank_123_main_street_capacity
+sensor.propane_tank_123_main_street_consumption_total
+sensor.propane_tank_123_main_street_consumption_rate
+sensor.propane_tank_123_main_street_days_since_delivery
+```
+
 ## Energy Dashboard Integration
 
-The integration automatically creates consumption sensors compatible with Home Assistant's Energy Dashboard:
+The integration creates consumption sensors compatible with Home Assistant's Energy Dashboard:
 
-1. Go to Settings → Dashboards → Energy
+1. Go to Settings, then Dashboards, then Energy
 2. Add a Gas source
 3. Select your tank's "Total Consumption" sensor
 4. View your propane usage alongside other energy sources
 
-The integration intelligently tracks propane consumption by:
-- Monitoring gallon decreases between readings
-- Converting gallons to cubic feet (36.39 ft³ per gallon)
-- Validating realistic consumption patterns
-- Maintaining totals across Home Assistant restarts
+How consumption tracking works:
+
+- Compares volume readings between polls to calculate usage
+- Converts to the appropriate energy unit (ft³ for US, litres for CA)
+- Detects refills (volume increase) and excludes them from totals
+- Validates consumption against configurable thresholds
+- Persists totals to Home Assistant storage so they survive restarts
 
 ## Device Organization
 
 Each propane tank appears as a separate device in Home Assistant:
-- **Device Name**: "Propane Tank - [Service Address]"
-- **Manufacturer**: Superior Plus Propane
-- **Model**: Tank capacity (e.g., "100 Gallon Tank")
-- **All Sensors**: Grouped under the respective tank device
+
+| Field | US | CA |
+|-------|----|----|
+| Device Name | Propane Tank - [Address] | Propane Tank - [Address] |
+| Manufacturer | Superior Plus Propane | Superior Propane |
+| Model | e.g. "500 Gallon Tank" | e.g. "1000 Litre Tank" |
+
+All sensors for a tank are grouped under its device.
 
 ## Automation Examples
 
@@ -140,7 +179,7 @@ automation:
     action:
       - service: notify.mobile_app
         data:
-          message: "Main house propane tank is at {{ states('sensor.superior_plus_propane_main_house_level') }}%"
+          message: "Propane tank is at {{ states('sensor.superior_plus_propane_main_house_level') }}%"
 ```
 
 ### Delivery Reminder
@@ -154,87 +193,78 @@ automation:
     action:
       - service: persistent_notification.create
         data:
-          message: "It's been over a year since your last propane delivery"
+          message: "It's been over a year since your last propane delivery."
 ```
 
 ## Troubleshooting
 
 ### Authentication Issues
-- Verify your email and password work on [mysuperioraccountlogin.com](https://mysuperioraccountlogin.com/)
-- Ensure your account has active propane service
-- Check for any account restrictions or two-factor authentication
+
+- **US customers**: Verify your credentials at [mysuperioraccountlogin.com](https://mysuperioraccountlogin.com/)
+- **CA customers**: Verify your credentials at [mysuperior.superiorpropane.com](https://mysuperior.superiorpropane.com/)
+- Make sure you selected the correct region during setup
+- Check for account restrictions or two-factor authentication
 
 ### No Tank Data
-- Confirm your tanks appear in the mySuperior portal
-- Verify you have active propane service with Superior Plus
+
+- Confirm your tanks appear when you log into the mySuperior portal directly
+- Verify you have active propane service
 - Check that tank monitoring is enabled on your account
 
 ### Missing Sensors
-- Review Home Assistant logs: Settings → System → Logs
-- Ensure the integration setup completed without errors
-- Try removing and re-adding the integration
+
+- Check Home Assistant logs: Settings, then System, then Logs
+- If the integration loaded without errors but shows no sensors, try removing and re-adding it
+- CA accounts may need a longer update interval (the default 7200s is recommended)
 
 ### Update Issues
+
 - Check your internet connection
-- Verify the mySuperior portal is accessible
-- Consider increasing the update interval if you're experiencing rate limiting
+- Verify the mySuperior portal is accessible in your browser
+- The integration backs off automatically on connection errors and retries at a shorter interval
+- If the portal is under maintenance, the integration returns cached data for up to 4 hours
 
 ## Technical Details
 
-### Data Sources
-All data is retrieved from Superior Plus Propane's official customer systems:
-- Tank levels and readings from the mySuperior portal
-- Delivery history and service information
-- Account details for device identification
-
 ### Architecture
-- **Async Implementation**: Fully asynchronous following Home Assistant best practices
-- **API Client**: Handles secure authentication and data retrieval
-- **Data Coordinator**: Manages updates and consumption calculations  
-- **Entity Platform**: Individual sensors for each tank metric
-- **Storage**: Persistent consumption tracking across restarts
+
+- Fully async — runs on Home Assistant's event loop with `aiohttp` for HTTP
+- Region-specific API clients handle authentication and HTML parsing for each portal
+- A shared `DataUpdateCoordinator` manages polling, consumption calculation, and threshold validation
+- Persistent storage via Home Assistant's `Store` for consumption totals across restarts
 
 ### Privacy & Security
-- Credentials are stored securely using Home Assistant's credential storage
-- No data is transmitted to third parties
-- All communication is directly with Superior Plus Propane's servers
 
-## Supported Regions
-
-This integration works with Superior Plus Propane service areas across:
-- 22 U.S. States where Superior Plus Propane operates
-- 200+ service locations nationwide
-- All customers with mySuperior portal access
+- Credentials are stored using Home Assistant's config entry storage
+- No data is sent to third parties
+- All communication goes directly to the respective mySuperior portal servers
 
 ## Contributing
 
-Contributions are welcome! Please:
+Contributions are welcome.
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with proper testing
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Make your changes
+4. Run linting: `scripts/lint`
+5. Commit and push
 6. Open a Pull Request
 
 ### Development Setup
+
 ```bash
-# Clone the repository
 git clone https://github.com/connorgallopo/Superior-Plus-Propane.git
 cd Superior-Plus-Propane
-
-# Install development dependencies
 pip install -r requirements.txt
-
-# Run linting
-ruff check .
+scripts/lint
 ```
 
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/connorgallopo/Superior-Plus-Propane/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/connorgallopo/Superior-Plus-Propane/discussions)
-- **Superior Plus Support**: [Contact Superior Plus Propane](https://www.superiorpluspropane.com/) for account-related issues
+- **US Account Issues**: [Contact Superior Plus Propane](https://www.superiorpluspropane.com/)
+- **CA Account Issues**: [Contact Superior Propane](https://www.superiorpropane.com/)
 
 ## License
 
@@ -242,11 +272,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Disclaimer
 
-This integration is not affiliated with, endorsed by, or officially supported by Superior Plus Propane. It is an independent project that interfaces with publicly available customer portal data. Use at your own risk.
+This integration is not affiliated with, endorsed by, or officially supported by Superior Plus Propane or Superior Propane. It is an independent project that interfaces with customer portal data. Use at your own risk.
 
-**Superior Plus Propane** and **mySuperior** are trademarks of Superior Plus LP.
+**Superior Plus Propane**, **Superior Propane**, and **mySuperior** are trademarks of Superior Plus LP.
 
 ---
 
 ### Keywords for Discovery
-*propane, propane tank, propane monitoring, Superior Plus, Superior Plus Propane, mySuperior, tank level, propane delivery, energy dashboard, home assistant, smart home, propane automation, tank monitoring, fuel monitoring, propane sensor*
+*propane, propane tank, propane monitoring, Superior Plus, Superior Plus Propane, Superior Propane, mySuperior, tank level, propane delivery, energy dashboard, home assistant, propane automation, tank monitoring, fuel monitoring, propane sensor, Canada propane, US propane*
