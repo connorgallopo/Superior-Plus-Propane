@@ -9,8 +9,9 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.loader import Integration
 
-    from .api import SuperiorPlusPropaneApiClient
+    from .api import SuperiorPropaneApiBase
     from .coordinator import SuperiorPlusPropaneDataUpdateCoordinator
+    from .region import RegionConfig
 
 
 type SuperiorPlusPropaneConfigEntry = ConfigEntry[SuperiorPlusPropaneData]
@@ -20,6 +21,7 @@ type SuperiorPlusPropaneConfigEntry = ConfigEntry[SuperiorPlusPropaneData]
 class SuperiorPlusPropaneData:
     """Data for the Superior Plus Propane integration."""
 
-    client: SuperiorPlusPropaneApiClient
+    client: SuperiorPropaneApiBase
     coordinator: SuperiorPlusPropaneDataUpdateCoordinator
     integration: Integration
+    region_config: RegionConfig
