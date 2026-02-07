@@ -42,8 +42,9 @@ class RegionConfig:
     retry_interval: int
     auth_settle_delay: int
 
-    # Entity naming
+    # Feature flags
     has_entity_name: bool
+    has_per_tank_price: bool
 
 
 US_REGION_CONFIG = RegionConfig(
@@ -70,6 +71,7 @@ US_REGION_CONFIG = RegionConfig(
     retry_interval=300,
     auth_settle_delay=0,
     has_entity_name=False,
+    has_per_tank_price=True,
 )
 
 CA_REGION_CONFIG = RegionConfig(
@@ -96,6 +98,7 @@ CA_REGION_CONFIG = RegionConfig(
     retry_interval=300,
     auth_settle_delay=8,
     has_entity_name=True,
+    has_per_tank_price=False,
 )
 
 REGION_CONFIGS: dict[str, RegionConfig] = {

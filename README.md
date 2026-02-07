@@ -43,7 +43,8 @@ For each propane tank on your account, the integration creates the following sen
 | Reading Date | When the level was last measured |
 | Last Delivery | Date of most recent propane delivery |
 | Days Since Delivery | Calculated days since last fill |
-| Price per Unit | Current pricing (USD/ft³ for US, CAD/L for CA) |
+| Price per Unit | Current pricing in USD/ft³ (US only) |
+| Average Price | Average price paid from order history (CAD/L for CA, USD/ft³ for US) |
 
 ### Energy Dashboard Sensors
 
@@ -117,11 +118,16 @@ US entities use the full integration domain and tank address:
 
 ```
 sensor.superior_plus_propane_123_main_street_level
-sensor.superior_plus_propane_123_main_street_gallons
+sensor.superior_plus_propane_123_main_street_current_volume
 sensor.superior_plus_propane_123_main_street_capacity
-sensor.superior_plus_propane_123_main_street_consumption_total
-sensor.superior_plus_propane_123_main_street_consumption_rate
+sensor.superior_plus_propane_123_main_street_reading_date
+sensor.superior_plus_propane_123_main_street_last_delivery
+sensor.superior_plus_propane_123_main_street_price_per_unit
 sensor.superior_plus_propane_123_main_street_days_since_delivery
+sensor.superior_plus_propane_123_main_street_total_consumption
+sensor.superior_plus_propane_123_main_street_consumption_rate
+sensor.superior_plus_propane_123_main_street_data_quality
+sensor.superior_plus_propane_123_main_street_average_price
 ```
 
 ### Canada
@@ -130,11 +136,15 @@ CA entities use Home Assistant's `has_entity_name` convention with shorter senso
 
 ```
 sensor.propane_tank_123_main_street_level
-sensor.propane_tank_123_main_street_volume
+sensor.propane_tank_123_main_street_current_volume
 sensor.propane_tank_123_main_street_capacity
-sensor.propane_tank_123_main_street_consumption_total
-sensor.propane_tank_123_main_street_consumption_rate
+sensor.propane_tank_123_main_street_reading_date
+sensor.propane_tank_123_main_street_last_delivery
 sensor.propane_tank_123_main_street_days_since_delivery
+sensor.propane_tank_123_main_street_total_consumption
+sensor.propane_tank_123_main_street_consumption_rate
+sensor.propane_tank_123_main_street_data_quality
+sensor.propane_tank_123_main_street_average_price
 ```
 
 ## Energy Dashboard Integration
@@ -168,18 +178,34 @@ All sensors for a tank are grouped under its device.
 
 ## Automation Examples
 
-### Low Tank Alert
+Replace the entity IDs below with your actual entity IDs from Settings > Devices & Services.
+
+### Low Tank Alert (US)
 ```yaml
 automation:
   - alias: "Propane Tank Low"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.superior_plus_propane_main_house_level
+        entity_id: sensor.superior_plus_propane_123_main_street_level
         below: 20
     action:
       - service: notify.mobile_app
         data:
-          message: "Propane tank is at {{ states('sensor.superior_plus_propane_main_house_level') }}%"
+          message: "Propane tank is at {{ states('sensor.superior_plus_propane_123_main_street_level') }}%"
+```
+
+### Low Tank Alert (Canada)
+```yaml
+automation:
+  - alias: "Propane Tank Low"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.propane_tank_123_main_street_level
+        below: 20
+    action:
+      - service: notify.mobile_app
+        data:
+          message: "Propane tank is at {{ states('sensor.propane_tank_123_main_street_level') }}%"
 ```
 
 ### Delivery Reminder
@@ -188,7 +214,8 @@ automation:
   - alias: "Propane Delivery Overdue"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.superior_plus_propane_main_house_days_since_delivery
+        entity_id: sensor.superior_plus_propane_123_main_street_days_since_delivery
+        # For CA, use: sensor.propane_tank_123_main_street_days_since_delivery
         above: 365
     action:
       - service: persistent_notification.create

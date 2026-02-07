@@ -89,7 +89,6 @@ async def async_setup_entry(
                 SuperiorPlusPropaneLastDeliverySensor(
                     coordinator, tank_data, region_config
                 ),
-                SuperiorPlusPropanePriceSensor(coordinator, tank_data, region_config),
                 SuperiorPlusPropaneDaysSinceDeliverySensor(
                     coordinator, tank_data, region_config
                 ),
@@ -104,6 +103,11 @@ async def async_setup_entry(
                 ),
             ]
         )
+
+        if region_config.has_per_tank_price:
+            entities.append(
+                SuperiorPlusPropanePriceSensor(coordinator, tank_data, region_config)
+            )
 
     # Add average price sensor (reads from orders data, one per integration)
     if tanks:
