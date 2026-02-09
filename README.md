@@ -68,10 +68,13 @@ For each propane tank on your account, the integration creates the following sen
 3. Click the three dots menu, then "Custom repositories"
 4. Add this repository URL: `https://github.com/connorgallopo/Superior-Plus-Propane`
 5. Category: "Integration"
-6. Install "Superior Plus Propane" from HACS
-7. Restart Home Assistant
-8. Go to Settings, then Devices & Services, then Add Integration
-9. Search for "Superior Plus Propane"
+6. Click "Add"
+7. Search for "Superior Plus Propane" in HACS and click "Download"
+8. Restart Home Assistant
+9. Go to Settings > Devices & Services > Add Integration
+10. Search for "Superior Plus Propane"
+
+If you already have the custom repository added (e.g., from a previous install), skip steps 3-6 and search HACS directly.
 
 ### Manual Installation
 
@@ -132,20 +135,22 @@ sensor.superior_plus_propane_123_main_street_average_price
 
 ### Canada
 
-CA entities use Home Assistant's `has_entity_name` convention with shorter sensor labels under the device:
+CA entities use Home Assistant's `has_entity_name` convention. Entity IDs are derived from the tank name shown in the mySuperior portal (e.g., "Tank Number 1"):
 
 ```
-sensor.propane_tank_123_main_street_level
-sensor.propane_tank_123_main_street_current_volume
-sensor.propane_tank_123_main_street_capacity
-sensor.propane_tank_123_main_street_reading_date
-sensor.propane_tank_123_main_street_last_delivery
-sensor.propane_tank_123_main_street_days_since_delivery
-sensor.propane_tank_123_main_street_total_consumption
-sensor.propane_tank_123_main_street_consumption_rate
-sensor.propane_tank_123_main_street_data_quality
-sensor.propane_tank_123_main_street_average_price
+sensor.tank_number_1_level
+sensor.tank_number_1_current_volume
+sensor.tank_number_1_capacity
+sensor.tank_number_1_reading_date
+sensor.tank_number_1_last_delivery
+sensor.tank_number_1_days_since_delivery
+sensor.tank_number_1_total_consumption
+sensor.tank_number_1_consumption_rate
+sensor.tank_number_1_data_quality
+sensor.tank_number_1_average_price
 ```
+
+Your actual entity IDs depend on how your tanks are named in the CA portal. Check Settings > Devices & Services to see your exact entity IDs.
 
 ## Energy Dashboard Integration
 
@@ -170,7 +175,7 @@ Each propane tank appears as a separate device in Home Assistant:
 
 | Field | US | CA |
 |-------|----|----|
-| Device Name | Propane Tank - [Address] | Propane Tank - [Address] |
+| Device Name | Propane Tank - [Address] | [Tank name from portal] (e.g., "Tank Number 1") |
 | Manufacturer | Superior Plus Propane | Superior Propane |
 | Model | e.g. "500 Gallon Tank" | e.g. "1000 Litre Tank" |
 
@@ -178,7 +183,7 @@ All sensors for a tank are grouped under its device.
 
 ## Automation Examples
 
-Replace the entity IDs below with your actual entity IDs from Settings > Devices & Services.
+Replace the entity IDs below with your actual entity IDs. You can find them in Settings > Devices & Services, or create automations through the visual editor in Settings > Automations which will fill in the entity IDs for you.
 
 ### Low Tank Alert (US)
 ```yaml
@@ -200,12 +205,12 @@ automation:
   - alias: "Propane Tank Low"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.propane_tank_123_main_street_level
+        entity_id: sensor.tank_number_1_level
         below: 20
     action:
       - service: notify.mobile_app
         data:
-          message: "Propane tank is at {{ states('sensor.propane_tank_123_main_street_level') }}%"
+          message: "Propane tank is at {{ states('sensor.tank_number_1_level') }}%"
 ```
 
 ### Delivery Reminder
@@ -215,7 +220,7 @@ automation:
     trigger:
       - platform: numeric_state
         entity_id: sensor.superior_plus_propane_123_main_street_days_since_delivery
-        # For CA, use: sensor.propane_tank_123_main_street_days_since_delivery
+        # For CA, use: sensor.tank_number_1_days_since_delivery
         above: 365
     action:
       - service: persistent_notification.create
