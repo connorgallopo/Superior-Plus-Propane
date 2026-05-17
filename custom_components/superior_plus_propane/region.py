@@ -26,6 +26,7 @@ class RegionConfig:
     rate_display_unit: str
     rate_display_factor: float
     price_unit: str
+    price_display_factor: float
 
     # Thresholds and validation bounds (in native volume units)
     default_update_interval: int
@@ -59,6 +60,7 @@ US_REGION_CONFIG = RegionConfig(
     rate_display_unit="ft³/h",
     rate_display_factor=1.0,
     price_unit="USD/ft³",
+    price_display_factor=1 / 36.39,
     default_update_interval=3600,
     default_min_threshold=0.01,
     default_max_threshold=25.0,
@@ -86,6 +88,7 @@ CA_REGION_CONFIG = RegionConfig(
     rate_display_unit="L/h",
     rate_display_factor=3.6724,
     price_unit="CAD/L",
+    price_display_factor=1.0,
     default_update_interval=7200,
     default_min_threshold=0.01,
     default_max_threshold=25.0,
