@@ -168,7 +168,7 @@ class SuperiorPlusPropaneVolumeSensor(SuperiorPlusPropaneEntity, SensorEntity):
         self._attr_name = _build_sensor_name(region_config, tank_data, "Current Volume")
         self._attr_native_unit_of_measurement = region_config.volume_unit
         self._attr_device_class = SensorDeviceClass.VOLUME
-        self._attr_state_class = None
+        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:propane-tank"
 
     @property
@@ -203,7 +203,7 @@ class SuperiorPlusPropaneCapacitySensor(SuperiorPlusPropaneEntity, SensorEntity)
         self._attr_name = _build_sensor_name(region_config, tank_data, "Capacity")
         self._attr_native_unit_of_measurement = region_config.volume_unit
         self._attr_device_class = SensorDeviceClass.VOLUME
-        self._attr_state_class = None
+        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:propane-tank-outline"
 
     @property
