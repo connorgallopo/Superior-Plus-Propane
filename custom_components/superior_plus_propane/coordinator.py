@@ -62,6 +62,7 @@ class SuperiorPlusPropaneDataUpdateCoordinator(DataUpdateCoordinator):
         self.config_entry = config_entry
         self._previous_readings: dict[str, float] = {}
         self._consumption_totals: dict[str, float] = {}
+        self._smoothed_state: dict[str, dict[str, float]] = {}
         self._store = Store(
             hass, STORAGE_VERSION, f"{STORAGE_KEY}_{config_entry.entry_id}"
         )
@@ -83,6 +84,7 @@ class SuperiorPlusPropaneDataUpdateCoordinator(DataUpdateCoordinator):
         if stored_data:
             self._consumption_totals = stored_data.get("consumption_totals", {})
             self._previous_readings = stored_data.get("previous_readings", {})
+            self._smoothed_state = stored_data.get("smoothed_state", {})
             LOGGER.debug("Loaded consumption data: %s", self._consumption_totals)
 
     async def async_save_consumption_data(self) -> None:
@@ -91,10 +93,44 @@ class SuperiorPlusPropaneDataUpdateCoordinator(DataUpdateCoordinator):
             "version": STORAGE_VERSION,
             "consumption_totals": self._consumption_totals,
             "previous_readings": self._previous_readings,
+            "smoothed_state": self._smoothed_state,
             "last_updated": datetime.now(UTC).isoformat(),
         }
         await self._store.async_save(data)
         LOGGER.debug("Saved consumption data: %s", self._consumption_totals)
+
+    def _record_smoothed_transition(
+        self, tank_id: str, consumption_energy: float
+    ) -> None:
+        """Capture the rate of the just-finished plateau for forward projection."""
+        now_ts = datetime.now(UTC).timestamp()
+        prev = self._smoothed_state.get(tank_id)
+        rate = 0.0
+        if prev:
+            elapsed_hours = max(0.0, (now_ts - prev["time"]) / SECONDS_PER_HOUR)
+            if elapsed_hours > 0:
+                rate = consumption_energy / elapsed_hours
+        self._smoothed_state[tank_id] = {
+            "time": now_ts,
+            "total_at_transition": self._consumption_totals.get(tank_id, 0.0),
+            "rate_per_hour": rate,
+            "projection_cap": consumption_energy,
+        }
+
+    def get_smoothed_consumption_total(self, tank_id: str) -> float:
+        """Smoothed cumulative consumption (linear projection between plateau steps)."""
+        raw_total = self._consumption_totals.get(tank_id, 0.0)
+        state = self._smoothed_state.get(tank_id)
+        if not state:
+            return raw_total
+        elapsed_hours = max(
+            0.0, (datetime.now(UTC).timestamp() - state["time"]) / SECONDS_PER_HOUR
+        )
+        projected = min(
+            state["rate_per_hour"] * elapsed_hours,
+            state["projection_cap"],
+        )
+        return state["total_at_transition"] + projected
 
     def _is_data_fresh(self) -> bool:
         """Check if existing data is fresh enough to serve as stale fallback."""
@@ -307,6 +343,8 @@ class SuperiorPlusPropaneDataUpdateCoordinator(DataUpdateCoordinator):
                         consumption_volume,
                         self._consumption_totals[tank_id],
                     )
+
+                self._record_smoothed_transition(tank_id, consumption_energy)
 
         actual_previous = self._previous_readings.get(tank_id)
         self._previous_readings[tank_id] = current_volume

@@ -95,6 +95,9 @@ async def async_setup_entry(
                 SuperiorPlusPropaneConsumptionTotalSensor(
                     coordinator, tank_data, region_config
                 ),
+                SuperiorPlusPropaneSmoothedConsumptionSensor(
+                    coordinator, tank_data, region_config
+                ),
                 SuperiorPlusPropaneConsumptionRateSensor(
                     coordinator, tank_data, region_config
                 ),
@@ -383,6 +386,41 @@ class SuperiorPlusPropaneConsumptionTotalSensor(
             return None
 
         return tank_data.get("consumption_total", 0.0) * self._display_factor
+
+
+class SuperiorPlusPropaneSmoothedConsumptionSensor(
+    SuperiorPlusPropaneEntity, SensorEntity
+):
+    """Total consumption with plateau steps interpolated to a linear ramp."""
+
+    def __init__(
+        self,
+        coordinator: SuperiorPlusPropaneDataUpdateCoordinator,
+        tank_data: dict[str, Any],
+        region_config: RegionConfig,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, tank_data)
+        self._attr_unique_id = _build_unique_id(tank_data, "consumption_smoothed")
+        self._attr_name = _build_sensor_name(
+            region_config, tank_data, "Smoothed Consumption"
+        )
+        self._attr_native_unit_of_measurement = region_config.consumption_display_unit
+        self._attr_device_class = SensorDeviceClass.GAS
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_icon = "mdi:fire-circle"
+        self._display_factor = region_config.consumption_display_factor
+        self._tank_id = tank_data["tank_id"]
+
+    @property
+    def native_value(self) -> float | None:
+        """Return smoothed total consumption in display units."""
+        if not self._get_tank_data():
+            return None
+        return (
+            self.coordinator.get_smoothed_consumption_total(self._tank_id)
+            * self._display_factor
+        )
 
 
 class SuperiorPlusPropaneConsumptionRateSensor(SuperiorPlusPropaneEntity, SensorEntity):
